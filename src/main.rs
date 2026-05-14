@@ -1,59 +1,121 @@
-fn main() {
-    let input = "1+(3+4)*sin(5)";
+//--------------------faculty doesnt work rn------------------------
 
-    // let (expression, _right) = parse_expression(input);
-    //println!(" {} ", expression);
-    let v = tokenize_expression(input);
-    println!("{:?}", v)
+use std::iter::Peekable;
+use std::vec::IntoIter;
+
+//programm entry
+fn main()
+{
+    let input = "(-6+2)*sin(1)%2";
+    let tokens = tokenize_expression(input);
+    println!("Tokens: {:?}", tokens);
+
+    let mut it = tokens.into_iter().peekable();
+    let root = parse_expression(&mut it);
+    print_tree(&root, 0);
+    let result = eval_tree(&root);
+    println!("result: {}", result);
 }
-
+//A enum that represents a token used to classify the expression
 #[derive(Debug, PartialEq)]
-enum Token {
+enum Token
+{
     Number(f64),
     Paren(char),        // '(' oder ')'
     Operator(char),     // '+', '-', '*', '/'
     Identifier(String), // "sin", "x", "pi"
 }
 
-fn tokenize_expression(input: &str) -> Vec<Token> {
+// A enum that represent a node of a abstact syntax tree.
+// can be either a atomic number (leaf node)
+// or a binary expression that consists of a left node, right node and a opertion
+// a unary expression containing a operation and a child Node
+// a function call containing a function name and arg Node
+enum Node
+{
+    Number(f64),
+    BinaryExpr
+    {
+        left: Box<Node>,  //left rekursive childnode
+        op: char,         //binary operation
+        right: Box<Node>, //right rekursice childnode
+    },
+    UnaryExpr
+    {
+        op: char,
+        child: Box<Node>,
+    },
+    FunctionCall
+    {
+        name: String,
+        arg: Box<Node>,
+    },
+}
+
+//function to tokenize a mathematial expression string into a vector of Tokens
+// param: input string containing expression
+// return: vector of Tokens
+fn tokenize_expression(input: &str) -> Vec<Token>
+{
     let mut tokens = Vec::new();
     let mut chars = input.chars().peekable();
 
-    while let Some(&c) = chars.peek() {
-        match c {
-            '0'..='9' | '.' => {
+    while let Some(&c) = chars.peek()
+    {
+        match c
+        {
+            '0'..='9' | '.' =>
+            //numbers
+            {
                 let mut num_string = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c.is_ascii_digit() {
+                while let Some(&c) = chars.peek()
+                {
+                    if c.is_ascii_digit()
+                    {
                         num_string.push(chars.next().unwrap());
-                    } else {
+                    }
+                    else
+                    {
                         break;
                     }
-                    tokens.push(Token::Number(num_string.parse().unwrap_or(0.0)));
                 }
+                tokens.push(Token::Number(num_string.parse().unwrap_or(0.0)));
             }
-            'a'..='z' | 'A'..='Z' => {
+            'a'..='z' | 'A'..='Z' =>
+            //indentifiers
+            {
                 let mut id_string = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c.is_ascii_alphanumeric() {
+                while let Some(&c) = chars.peek()
+                {
+                    if c.is_ascii_alphanumeric()
+                    {
                         id_string.push(chars.next().unwrap())
-                    } else {
+                    }
+                    else
+                    {
                         break;
                     }
                 }
                 tokens.push(Token::Identifier(id_string));
             }
 
-            '+' | '-' | '*' | '/' => {
+            '+' | '-' | '*' | '/' | '^' | '%' | '!' =>
+            //operations
+            {
                 tokens.push(Token::Operator(chars.next().unwrap()));
             }
-            '(' | ')' => {
+            '(' | ')' =>
+            {
                 tokens.push(Token::Paren(chars.next().unwrap()));
             }
-            _ if c.is_whitespace() => {
-                chars.next(); // Leerzeichen einfach überspringen
+            _ if c.is_whitespace() =>
+            //skip whitspaces
+            {
+                chars.next();
             }
-            _ => {
+            _ =>
+            //error for other chars
+            {
                 println!("unknown char: {}", c);
                 chars.next();
             }
@@ -62,29 +124,239 @@ fn tokenize_expression(input: &str) -> Vec<Token> {
     tokens
 }
 
-fn parse_expression(mut input: &str) -> (String, &str) {
-    let mut expression = String::new();
+//parser that puts atomic expressions like numbers and functions into nodes
+//if a open parentheses is encountered rekursive search for a new epression is started
+//param: reference to a Token iterator
+//return: a atomic Node or tree if parenthises are found
+fn parse_atom(it: &mut Peekable<IntoIter<Token>>) -> Node
+{
+    match it.next()
+    {
+        Some(Token::Number(n)) => Node::Number(n),
+        Some(Token::Paren('(')) =>
+        {
+            let result = parse_expression(it);
+            // Expect closing parenthesis
+            match it.next()
+            {
+                Some(Token::Paren(')')) => result,
+                _ => panic!("Expected closing parenthesis ')'"),
+            }
+        }
+        Some(Token::Identifier(name)) => match it.next()
+        {
+            Some(Token::Paren('(')) =>
+            {
+                let arg = parse_expression(it);
+                if let Some(Token::Paren(')')) = it.next()
+                {
+                    Node::FunctionCall {
+                        name,
+                        arg: Box::new(arg),
+                    }
+                }
+                else
+                {
+                    panic!("expected ')' ending argument");
+                }
+            }
+            _ => panic!("expected '(' after funcion name"),
+        },
+        Some(t) => panic!("Unexpected token in atom: {:?}", t),
+        None => panic!("Unexpected end of input"),
+    }
+}
 
-    while !input.is_empty() {
-        if let Some(c) = input.chars().next() {
-            match c {
-                '(' => {
-                    let (inner_content, right) = parse_expression(&input[1..]);
-                    println!("{}", inner_content);
-                    expression.push_str(&format!("{}", inner_content));
-                    input = right;
+fn parse_unary(it: &mut Peekable<IntoIter<Token>>) -> Node
+{
+    if let Some(Token::Operator(op @ '-')) = it.peek()
+    {
+        let op = *op;
+        it.next();
+        return Node::UnaryExpr {
+            op,
+            child: Box::new(parse_unary(it)),
+        };
+    }
+    parse_atom(it)
+}
+
+//parser that creates a tree for power operations (2²)
+// param: reference to a Token iterator
+// return: root to the power expression tree
+fn parse_power(it: &mut Peekable<IntoIter<Token>>) -> Node
+{
+    let mut left = parse_unary(it);
+
+    if let Some(Token::Operator('^')) = it.peek()
+    {
+        it.next();
+        let right = parse_power(it);
+        left = Node::BinaryExpr {
+            left: Box::new(left),
+            op: '^',
+            right: Box::new(right),
+        };
+    }
+    left
+}
+
+//parser that creates a tree for a term
+// param: reference to a Token iterator
+// return: root to term tree
+fn parse_term(it: &mut Peekable<IntoIter<Token>>) -> Node
+{
+    let mut left = parse_power(it);
+    while let Some(token) = it.peek()
+    {
+        match token
+        {
+            Token::Operator('*') | Token::Operator('/') | Token::Operator('%') =>
+            {
+                let op_token = it.next().unwrap();
+                let op = if let Token::Operator(c) = op_token
+                {
+                    c
                 }
-                ')' => {
-                    return (expression, &input[1..]);
+                else
+                {
+                    unreachable!("");
+                };
+                let right = parse_power(it);
+                left = Node::BinaryExpr {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                };
+            }
+            _ => break,
+        }
+    }
+    left
+}
+
+//parser that returns a tree for a mathematical expression
+// param: reference to a Token iterator
+// return: root to expression tree
+fn parse_expression(it: &mut Peekable<IntoIter<Token>>) -> Node
+{
+    let mut left = parse_term(it);
+    while let Some(token) = it.peek()
+    {
+        match token
+        {
+            Token::Operator('+') | Token::Operator('-') =>
+            {
+                let op_token = it.next().unwrap();
+                let op = if let Token::Operator(c) = op_token
+                {
+                    c
                 }
-                _ => {
-                    expression.push(c);
-                    input = &input[1..];
+                else
+                {
+                    unreachable!("");
+                };
+                let right = parse_term(it);
+
+                left = Node::BinaryExpr {
+                    left: Box::new(left),
+                    op,
+                    right: Box::new(right),
+                };
+            }
+            _ => break,
+        }
+    }
+    left
+}
+
+//function that calculates the result of a given expression tree
+//param: root Node to expression tree
+//return: calculated f64 value of given tree
+fn eval_tree(node: &Node) -> f64
+{
+    match node
+    {
+        Node::Number(n) =>
+        {
+            return *n;
+        }
+        Node::BinaryExpr { left, op, right } =>
+        {
+            let left_result = eval_tree(left);
+            let right_result = eval_tree(right);
+            match op
+            {
+                '+' => left_result + right_result,
+                '-' => left_result - right_result,
+                '*' => left_result * right_result,
+                '/' => left_result / right_result,
+                '%' => left_result % right_result,
+                '^' => left_result.powf(right_result),
+                _ => f64::NAN,
+            }
+        }
+        Node::UnaryExpr { op, child } =>
+        {
+            let child_result = eval_tree(child);
+            match op
+            {
+                '-' => -child_result,
+                '!' => factorial(child_result as u64) as f64,
+                _ => child_result,
+            }
+        }
+        Node::FunctionCall { name, arg } =>
+        {
+            let arg_result = eval_tree(arg);
+            match name.as_str()
+            {
+                "sin" => arg_result.sin(),
+                "cos" => arg_result.cos(),
+                "sinh" => arg_result.sinh(),
+                "cosh" => arg_result.cosh(),
+                "sqrt" => arg_result.sqrt(),
+                _ =>
+                {
+                    panic!("unknown function {}", name);
                 }
             }
         }
     }
-    (expression, input)
+}
+
+fn factorial(n: u64) -> u64
+{
+    (1..=n).product()
+}
+
+//function to print a expression tree
+fn print_tree(node: &Node, indent: usize)
+{
+    let spacing = "   ".repeat(indent);
+    match node
+    {
+        Node::Number(n) =>
+        {
+            println!("{}number: {}", spacing, n);
+        }
+        Node::BinaryExpr { left, op, right } =>
+        {
+            println!("{}operator: {}", spacing, op);
+            print_tree(left, indent + 1);
+            print_tree(right, indent + 1);
+        }
+        Node::UnaryExpr { op, child } =>
+        {
+            println!("{}operator: {}", spacing, op);
+            print_tree(child, indent + 1);
+        }
+        Node::FunctionCall { name, arg } =>
+        {
+            println!("{}function: {}", spacing, name);
+            print_tree(arg, indent + 1);
+        }
+    }
 }
 
 // use crossterm::{

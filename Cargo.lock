@@ -1395,6 +1395,7 @@ name = "unicalc"
 version = "0.1.0"
 dependencies = [
  "crossterm",
+ "num-traits",
  "ratatui",
 ]
 
