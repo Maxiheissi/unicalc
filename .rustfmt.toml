@@ -1,0 +1,5 @@
+# Setzt die öffnende Klammer für Funktionen, Control-Flow etc. in die nächste Zeile
+brace_style = "AlwaysNextLine"
+
+# Optional: Auch für Kontrollstrukturen wie if/else/loop
+control_brace_style = "AlwaysNextLine"
