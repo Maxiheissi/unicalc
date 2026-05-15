@@ -1,14 +1,12 @@
-//--------------------faculty doesnt work rn------------------------
-
 use std::iter::Peekable;
 use std::vec::IntoIter;
 
-//programm entry
+// program entry
 fn main()
 {
     let input = "(-6+2)*sin(1)%2";
-    let tokens = tokenize_expression(input);
-    println!("Tokens: {:?}", tokens);
+    let input1 = "pi";
+    let tokens = tokenize_expression(input1);
 
     let mut it = tokens.into_iter().peekable();
     let root = parse_expression(&mut it);
@@ -16,45 +14,49 @@ fn main()
     let result = eval_tree(&root);
     println!("result: {}", result);
 }
-//A enum that represents a token used to classify the expression
+
+// enum that represents a token used to classify parts of the expression
 #[derive(Debug, PartialEq)]
 enum Token
 {
     Number(f64),
-    Paren(char),        // '(' oder ')'
-    Operator(char),     // '+', '-', '*', '/'
-    Identifier(String), // "sin", "x", "pi"
+    Paren(char),        // '(' or ')'
+    Operator(char),     // '+', '-', '*', '/', '^', '%', '!', ','
+    Identifier(String), // function names, variables and constants like "sin", "x", "pi"
 }
 
-// A enum that represent a node of a abstact syntax tree.
-// can be either a atomic number (leaf node)
-// or a binary expression that consists of a left node, right node and a opertion
-// a unary expression containing a operation and a child Node
-// a function call containing a function name and arg Node
+// enum that represents a node in the abstract syntax tree (AST)
+// Number and Variable are leaf nodes, all others are inner nodes with children
 enum Node
 {
     Number(f64),
     BinaryExpr
     {
-        left: Box<Node>,  //left rekursive childnode
-        op: char,         //binary operation
-        right: Box<Node>, //right rekursice childnode
+        left: Box<Node>,  // left recursive child node
+        op: char,         // binary operator
+        right: Box<Node>, // right recursive child node
     },
-    UnaryExpr
+    UnaryPostfix
     {
-        op: char,
+        op: char, // postfix operator, e.g. '!'
+        child: Box<Node>,
+    },
+    UnaryPrefix
+    {
+        op: char, // prefix operator, e.g. unary '-'
         child: Box<Node>,
     },
     FunctionCall
     {
-        name: String,
-        arg: Box<Node>,
+        name: String,    // function name, e.g. "sin"
+        args: Vec<Node>, // evaluated argument list
     },
+    Variable(String), // named constant or variable, e.g. "pi", "e"
 }
 
-//function to tokenize a mathematial expression string into a vector of Tokens
-// param: input string containing expression
-// return: vector of Tokens
+// tokenizes a mathematical expression string into a vector of Tokens
+// param: input string containing the expression
+// return: vector of Tokens in order of appearance
 fn tokenize_expression(input: &str) -> Vec<Token>
 {
     let mut tokens = Vec::new();
@@ -64,13 +66,13 @@ fn tokenize_expression(input: &str) -> Vec<Token>
     {
         match c
         {
+            // greedily consume digits and '.' into a single number token
             '0'..='9' | '.' =>
-            //numbers
             {
                 let mut num_string = String::new();
                 while let Some(&c) = chars.peek()
                 {
-                    if c.is_ascii_digit()
+                    if c.is_ascii_digit() || c == '.'
                     {
                         num_string.push(chars.next().unwrap());
                     }
@@ -81,8 +83,8 @@ fn tokenize_expression(input: &str) -> Vec<Token>
                 }
                 tokens.push(Token::Number(num_string.parse().unwrap_or(0.0)));
             }
+            // greedily consume alphanumeric chars into an identifier token
             'a'..='z' | 'A'..='Z' =>
-            //indentifiers
             {
                 let mut id_string = String::new();
                 while let Some(&c) = chars.peek()
@@ -98,9 +100,8 @@ fn tokenize_expression(input: &str) -> Vec<Token>
                 }
                 tokens.push(Token::Identifier(id_string));
             }
-
-            '+' | '-' | '*' | '/' | '^' | '%' | '!' =>
-            //operations
+            // single-char operators, ',' is included here for use in argument lists
+            '+' | '-' | '*' | '/' | '^' | '%' | '!' | ',' =>
             {
                 tokens.push(Token::Operator(chars.next().unwrap()));
             }
@@ -109,12 +110,10 @@ fn tokenize_expression(input: &str) -> Vec<Token>
                 tokens.push(Token::Paren(chars.next().unwrap()));
             }
             _ if c.is_whitespace() =>
-            //skip whitspaces
             {
                 chars.next();
             }
             _ =>
-            //error for other chars
             {
                 println!("unknown char: {}", c);
                 chars.next();
@@ -124,73 +123,123 @@ fn tokenize_expression(input: &str) -> Vec<Token>
     tokens
 }
 
-//parser that puts atomic expressions like numbers and functions into nodes
-//if a open parentheses is encountered rekursive search for a new epression is started
-//param: reference to a Token iterator
-//return: a atomic Node or tree if parenthises are found
+// parses an atomic expression: a number, a parenthesized expression,
+// a function call or a variable
+// lowest level of the recursive descent — no operators handled here
+// param: reference to a peekable token iterator
+// return: leaf Node or subtree for parenthesized/function expressions
 fn parse_atom(it: &mut Peekable<IntoIter<Token>>) -> Node
 {
     match it.next()
     {
         Some(Token::Number(n)) => Node::Number(n),
+
+        // parenthesized sub-expression: recursively parse the inner expression
         Some(Token::Paren('(')) =>
         {
             let result = parse_expression(it);
-            // Expect closing parenthesis
+            // expect closing parenthesis
             match it.next()
             {
                 Some(Token::Paren(')')) => result,
                 _ => panic!("Expected closing parenthesis ')'"),
             }
         }
+
+        // BUG: it.next() here consumes the next token even if it isn't '('
+        // use it.peek() + conditional it.next() instead
         Some(Token::Identifier(name)) => match it.next()
         {
+            // function call: parse comma-separated argument list
             Some(Token::Paren('(')) =>
             {
-                let arg = parse_expression(it);
-                if let Some(Token::Paren(')')) = it.next()
+                let mut args = Vec::new();
+
+                if let Some(Token::Paren(')')) = it.peek()
+                // empty argument list
                 {
-                    Node::FunctionCall {
-                        name,
-                        arg: Box::new(arg),
-                    }
+                    it.next();
+                    Node::FunctionCall { name, args }
                 }
                 else
                 {
-                    panic!("expected ')' ending argument");
+                    args.push(parse_expression(it)); // first argument
+
+                    // each ',' introduces another argument
+                    while let Some(Token::Operator(',')) = it.peek()
+                    {
+                        it.next();
+                        args.push(parse_expression(it));
+                    }
+
+                    if let Some(Token::Paren(')')) = it.next()
+                    {
+                        Node::FunctionCall { name, args }
+                    }
+                    else
+                    {
+                        panic!("expected ')' after args of '{}'", name);
+                    }
                 }
             }
-            _ => panic!("expected '(' after funcion name"),
+            // anything other than '(' means the identifier is a variable/constant
+            _ => Node::Variable(name),
         },
         Some(t) => panic!("Unexpected token in atom: {:?}", t),
         None => panic!("Unexpected end of input"),
     }
 }
 
-fn parse_unary(it: &mut Peekable<IntoIter<Token>>) -> Node
+// parses a unary prefix operator (currently only unary minus)
+// right-associative: ---x is parsed as -(-(-(x)))
+// param: reference to a peekable token iterator
+// return: UnaryPrefix Node wrapping the operand, or delegates to parse_unary_postfix
+fn parse_unary_prefix(it: &mut Peekable<IntoIter<Token>>) -> Node
 {
     if let Some(Token::Operator(op @ '-')) = it.peek()
     {
         let op = *op;
         it.next();
-        return Node::UnaryExpr {
+        return Node::UnaryPrefix {
             op,
-            child: Box::new(parse_unary(it)),
+            child: Box::new(parse_unary_prefix(it)), // recursive for chained prefix ops
         };
     }
-    parse_atom(it)
+    else
+    {
+        parse_unary_postfix(it)
+    }
 }
 
-//parser that creates a tree for power operations (2²)
-// param: reference to a Token iterator
-// return: root to the power expression tree
+// parses unary postfix operators (currently only '!' for factorial)
+// left-associative: 5!! wraps as UnaryPostfix(UnaryPostfix(5))
+// param: reference to a peekable token iterator
+// return: UnaryPostfix Node, or the atom unchanged if no postfix op follows
+fn parse_unary_postfix(it: &mut Peekable<IntoIter<Token>>) -> Node
+{
+    let mut node = parse_atom(it);
+    while let Some(Token::Operator(op @ '!')) = it.peek()
+    {
+        let op = *op;
+        it.next();
+        node = Node::UnaryPostfix {
+            op,
+            child: Box::new(node),
+        };
+    }
+    node
+}
+
+// parses power expressions (right-associative: 2^3^4 = 2^(3^4))
+// param: reference to a peekable token iterator
+// return: root of the power expression subtree
 fn parse_power(it: &mut Peekable<IntoIter<Token>>) -> Node
 {
-    let mut left = parse_unary(it);
-
+    let mut left = parse_unary_prefix(it);
     if let Some(Token::Operator('^')) = it.peek()
     {
         it.next();
+        // right-recursive call gives right-associativity
         let right = parse_power(it);
         left = Node::BinaryExpr {
             left: Box::new(left),
@@ -201,9 +250,9 @@ fn parse_power(it: &mut Peekable<IntoIter<Token>>) -> Node
     left
 }
 
-//parser that creates a tree for a term
-// param: reference to a Token iterator
-// return: root to term tree
+// parses multiplication, division and modulo (left-associative, equal precedence)
+// param: reference to a peekable token iterator
+// return: root of the term subtree
 fn parse_term(it: &mut Peekable<IntoIter<Token>>) -> Node
 {
     let mut left = parse_power(it);
@@ -235,9 +284,10 @@ fn parse_term(it: &mut Peekable<IntoIter<Token>>) -> Node
     left
 }
 
-//parser that returns a tree for a mathematical expression
-// param: reference to a Token iterator
-// return: root to expression tree
+// parses addition and subtraction (left-associative, lowest precedence)
+// entry point of the recursive descent parser
+// param: reference to a peekable token iterator
+// return: root of the full expression tree
 fn parse_expression(it: &mut Peekable<IntoIter<Token>>) -> Node
 {
     let mut left = parse_term(it);
@@ -270,9 +320,9 @@ fn parse_expression(it: &mut Peekable<IntoIter<Token>>) -> Node
     left
 }
 
-//function that calculates the result of a given expression tree
-//param: root Node to expression tree
-//return: calculated f64 value of given tree
+// evaluates an expression tree and returns its numerical result
+// param: root Node of the expression tree
+// return: calculated f64 result
 fn eval_tree(node: &Node) -> f64
 {
     match node
@@ -281,6 +331,14 @@ fn eval_tree(node: &Node) -> f64
         {
             return *n;
         }
+        Node::Variable(s) => match s.to_lowercase().as_str()
+        {
+            // built-in named constants
+            "pi" => std::f64::consts::PI,
+            "e" => std::f64::consts::E,
+            _ => panic!("unknown variable or constant {}", s),
+        },
+
         Node::BinaryExpr { left, op, right } =>
         {
             let left_result = eval_tree(left);
@@ -290,191 +348,169 @@ fn eval_tree(node: &Node) -> f64
                 '+' => left_result + right_result,
                 '-' => left_result - right_result,
                 '*' => left_result * right_result,
+                // division by zero yields f64::INFINITY, consistent with IEEE 754
                 '/' => left_result / right_result,
                 '%' => left_result % right_result,
                 '^' => left_result.powf(right_result),
                 _ => f64::NAN,
             }
         }
-        Node::UnaryExpr { op, child } =>
+        Node::UnaryPrefix { op, child } =>
         {
             let child_result = eval_tree(child);
             match op
             {
                 '-' => -child_result,
-                '!' => factorial(child_result as u64) as f64,
-                _ => child_result,
+                _ => f64::NAN,
             }
         }
-        Node::FunctionCall { name, arg } =>
+        Node::UnaryPostfix { op, child } =>
         {
-            let arg_result = eval_tree(arg);
-            match name.as_str()
+            let child_result = eval_tree(child);
+            match op
             {
-                "sin" => arg_result.sin(),
-                "cos" => arg_result.cos(),
-                "sinh" => arg_result.sinh(),
-                "cosh" => arg_result.cosh(),
-                "sqrt" => arg_result.sqrt(),
-                _ =>
-                {
-                    panic!("unknown function {}", name);
-                }
+                // factorial: rounds to nearest integer before computing
+                // panics on overflow for large values (u64 limit: 20!)
+                '!' => (1..=(child_result.round() as u64)).product::<u64>() as f64,
+                '%' => child_result / 100.0,
+                _ => f64::NAN,
             }
         }
+        Node::FunctionCall { name, args } => match name.as_str()
+        {
+            // trig functions expect radians
+            "sin" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).sin()
+            }
+            "cos" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).cos()
+            }
+            "tan" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).tan()
+            }
+            "sinh" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).sinh()
+            }
+            "cosh" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).cosh()
+            }
+            "tanh" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).tanh()
+            }
+            "sqrt" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).sqrt()
+            }
+            "max" =>
+            {
+                validate_args(name, args, 2);
+                let a = eval_tree(&args[0]);
+                let b = eval_tree(&args[1]);
+                a.max(b)
+            }
+            "min" =>
+            {
+                validate_args(name, args, 2);
+                let a = eval_tree(&args[0]);
+                let b = eval_tree(&args[1]);
+                a.min(b)
+            }
+            // root(x, n) computes the n-th root of x as x^(1/n)
+            "root" =>
+            {
+                validate_args(name, args, 2);
+                let a = eval_tree(&args[0]);
+                let b = eval_tree(&args[1]);
+                a.powf(1.0 / b)
+            }
+            // log(x, base) — argument order: value first, base second
+            "log" =>
+            {
+                validate_args(name, args, 2);
+                let a = eval_tree(&args[0]);
+                let b = eval_tree(&args[1]);
+                a.log(b)
+            }
+            "log10" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).log10()
+            }
+            "ln" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).ln()
+            }
+            "log2" =>
+            {
+                validate_args(name, args, 1);
+                eval_tree(&args[0]).log2()
+            }
+            _ =>
+            {
+                panic!("unknown function {}", name);
+            }
+        },
     }
 }
 
-fn factorial(n: u64) -> u64
+// panics if the number of provided arguments does not match the expected count
+// param: function name (for error message), arg slice, expected count
+fn validate_args(name: &str, args: &Vec<Node>, num_args: usize)
 {
-    (1..=n).product()
+    if args.len() != num_args
+    {
+        panic!("{} expects exactly {} argument(s)", name, num_args);
+    }
 }
 
-//function to print a expression tree
+// prints the expression tree to stdout with indentation showing depth
+// param: root Node, current indent level (call with 0 at the root)
 fn print_tree(node: &Node, indent: usize)
 {
     let spacing = "   ".repeat(indent);
     match node
     {
-        Node::Number(n) =>
-        {
-            println!("{}number: {}", spacing, n);
-        }
+        Node::Number(n) => println!("{}number: {}", spacing, n),
+
         Node::BinaryExpr { left, op, right } =>
         {
             println!("{}operator: {}", spacing, op);
             print_tree(left, indent + 1);
             print_tree(right, indent + 1);
         }
-        Node::UnaryExpr { op, child } =>
+        Node::UnaryPrefix { op, child } =>
         {
             println!("{}operator: {}", spacing, op);
             print_tree(child, indent + 1);
         }
-        Node::FunctionCall { name, arg } =>
+        Node::UnaryPostfix { op, child } =>
+        {
+            println!("{}operator: {}", spacing, op);
+            print_tree(child, indent + 1);
+        }
+        Node::FunctionCall { name, args } =>
         {
             println!("{}function: {}", spacing, name);
-            print_tree(arg, indent + 1);
+            for (i, arg) in args.iter().enumerate()
+            {
+                println!("{}  arg {}:", spacing, i + 1);
+                print_tree(arg, indent + 2);
+            }
         }
+        Node::Variable(s) => println!("{}variable: {}", spacing, s),
     }
 }
-
-// use crossterm::{
-//     ExecutableCommand,
-//     event::{self, KeyCode, KeyEvent, KeyEventKind},
-//     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
-// };a
-// use ratatui::{
-//     Frame, Terminal,
-//     backend::CrosstermBackend,
-//     layout::{Constraint, Direction, Layout},
-//     widgets::{Block, Borders, Paragraph},
-// };
-// use std::io::{Result, stdout};
-
-// fn main() -> Result<()> {
-//     // --- 1. Terminal Setup ---
-//     // Switch to the alternate screen (so the terminal clears on start)
-//     stdout().execute(EnterAlternateScreen)?;
-//     // Enable raw mode to capture keyboard input immediately
-//     enable_raw_mode()?;
-
-//     // Initialize the Ratatui terminal with the Crossterm backend
-//     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-
-//     // Application State
-//     let mut input = String::new();
-//     let mut history: Vec<String> = Vec::new();
-
-//     // --- 2. Main Application Loop ---
-//     loop {
-//         // Render the user interface
-//         terminal.draw(|f| draw_ui(f, &input, &history))?;
-
-//         // Check for terminal events (keyboard, resize, etc.)
-//         if event::poll(std::time::Duration::from_millis(16))? {
-//             if let event::Event::Key(key) = event::read()? {
-//                 // Only process the event if a key was pressed (ignores release events)
-//                 if key.kind == KeyEventKind::Press {
-//                     // Pass input logic to our handler
-//                     let should_quit = handle_input(key, &mut input, &mut history);
-
-//                     // Exit the loop if the handler returns true
-//                     if should_quit {
-//                         break;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-
-//     // --- 3. Cleanup ---
-//     // Restore the terminal to its original state before exiting
-//     disable_raw_mode()?;
-//     stdout().execute(LeaveAlternateScreen)?;
-//     Ok(())
-// }
-
-// /// Processes keyboard input and updates the application state.
-// /// Returns true if the application should exit.
-// fn handle_input(key: KeyEvent, input: &mut String, history: &mut Vec<String>) -> bool {
-//     match key.code {
-//         // Quit the application
-//         KeyCode::Char('q') => {
-//             return true;
-//         }
-
-//         // Append characters to the current input string
-//         KeyCode::Char(c) => {
-//             input.push(c);
-//         }
-
-//         // Remove the last character
-//         KeyCode::Backspace => {
-//             input.pop();
-//         }
-
-//         // Submit the calculation to history
-//         KeyCode::Enter => {
-//             if !input.is_empty() {
-//                 history.push(format!("{}", input));
-//                 input.clear();
-//             }
-//         }
-
-//         _ => {}
-//     }
-//     false
-// }
-
-// /// Renders the UI widgets into the terminal frame.
-// fn draw_ui(f: &mut Frame, input: &str, history: &[String]) {
-//     // Define vertical layout sections
-//     let chunks = Layout::default()
-//         .direction(Direction::Vertical)
-//         .constraints([
-//             Constraint::Min(0),    // Top: History (grows to fill space)
-//             Constraint::Length(3), // Middle: Input field (fixed height)
-//             Constraint::Length(1), // Bottom: Status/Help bar
-//         ])
-//         .split(f.area());
-
-//     // 1. History Widget (shows previous inputs)
-//     f.render_widget(
-//         Paragraph::new(history.join("\n"))
-//             .block(Block::default().title(" unicalc ").borders(Borders::ALL)),
-//         chunks[0],
-//     );
-
-//     // 2. Input Widget (shows what the user is currently typing)
-//     f.render_widget(
-//         Paragraph::new(input).block(Block::default().title(" Input ").borders(Borders::ALL)),
-//         chunks[1],
-//     );
-
-//     // 3. Footer Widget (simple help text without borders)
-//     f.render_widget(
-//         Paragraph::new("[Q] quit | [Enter] submit").block(Block::default().borders(Borders::NONE)),
-//         chunks[2],
-//     );
-// }
