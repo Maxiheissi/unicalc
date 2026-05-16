@@ -74,6 +74,61 @@ pub fn tokenize_expression(input: &str) -> Vec<Token>
             // greedily consume digits and '.' into a single number token
             '0'..='9' | '.' =>
             {
+                if c == '0'
+                {
+                    let mut chars_clone = chars.clone();
+                    chars_clone.next();
+                    match chars_clone.next()
+                    {
+                        Some('x') =>
+                        {
+                            chars.next();
+                            chars.next();
+                            let mut hex_string = String::new();
+                            while let Some(&c) = chars.peek()
+                            {
+                                if c.is_ascii_hexdigit()
+                                {
+                                    hex_string.push(chars.next().unwrap());
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+
+                            tokens.push(Token::Number(
+                                i64::from_str_radix(&hex_string, 16).unwrap_or(0) as f64,
+                            ));
+                            continue;
+                        }
+                        Some('b') =>
+                        {
+                            chars.next();
+                            chars.next();
+                            let mut bin_string = String::new();
+                            while let Some(&c) = chars.peek()
+                            {
+                                if c == '1' || c == '0'
+                                {
+                                    bin_string.push(chars.next().unwrap());
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+
+                            tokens.push(Token::Number(
+                                i64::from_str_radix(&bin_string, 2).unwrap_or(0) as f64,
+                            ));
+                            continue;
+                        }
+                        _ =>
+                        {} //fallthrough
+                    }
+                }
+
                 let mut num_string = String::new();
                 while let Some(&c) = chars.peek()
                 {

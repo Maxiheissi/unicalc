@@ -4,6 +4,7 @@ mod eval;
 fn main()
 {
     let input = "(-6+2)*sin(1)%2";
+    let input = "0b1010+0b1";
     let tokens = eval::tokenize_expression(input);
 
     let mut it = tokens.into_iter().peekable();
