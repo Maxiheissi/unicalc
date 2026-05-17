@@ -12,6 +12,13 @@ mod ui;
 
 fn main() -> Result<(), io::Error>
 {
+    let original_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        disable_raw_mode().unwrap();
+        execute!(io::stdout(), LeaveAlternateScreen).unwrap();
+        original_hook(info);
+    }));
+
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
 
@@ -46,26 +53,3 @@ fn main() -> Result<(), io::Error>
     disable_raw_mode()?;
     Ok(())
 }
-
-// // program entry
-// fn main()
-// {
-//     let input = "(-6+2)*sin(1)%2";
-//     let input = "0b1010+0b1";
-//     let tokens = eval::tokenize_expression(input);
-
-//     let mut it = tokens.into_iter().peekable();
-//     match eval::parse_expression(&mut it)
-//     {
-//         Ok(root) =>
-//         {
-//             eval::print_tree(&root, 0);
-//             match eval::eval_tree(&root)
-//             {
-//                 Ok(result) => println!("result: {}", result),
-//                 Err(e) => println!("eval error: {:?}", e),
-//             }
-//         }
-//         Err(e) => println!("parse error: {:?}", e),
-//     }
-// }

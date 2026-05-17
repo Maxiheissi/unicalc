@@ -39,11 +39,21 @@ impl App
             Ok(root) => eval::eval_tree(&root),
             Err(e) => Err(e),
         };
+
         let entry = HistoryEntry {
             input: self.input.clone(),
             result,
         };
-        self.history.push(entry);
+
+        if let Some(i) = self.selected
+        {
+            self.history[i] = entry;
+            self.selected = None;
+        }
+        else
+        {
+            self.history.push(entry);
+        }
         self.input.clear();
         self.cursor = 0;
         self.selected = None;
@@ -132,7 +142,7 @@ impl App
                     self.input = self.history[i + 1].input.clone();
                     self.cursor = self.input.len();
                 }
-                else if i == self.history.len()
+                else if i == self.history.len() - 1
                 {
                     self.selected = None;
                     self.input = String::new();
