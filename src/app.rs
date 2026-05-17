@@ -1,15 +1,144 @@
-mod eval;
+use std::ops::DerefMut;
 
-pub struct HystoryEntry
+use crate::eval::{self, CalcError};
+pub struct HistoryEntry
 {
-    input: String,
-    node: Node,
-    result: f64,
+    pub input: String,
+    pub result: Result<f64, CalcError>,
 }
 
 pub struct App
 {
-    input: String,
-    history: Vec<HystoryEntry>,
-    quit: bool,
+    pub input: String,
+    pub history: Vec<HistoryEntry>,
+    pub quit: bool,
+    pub cursor: usize,
+    pub selected: Option<usize>,
+}
+
+impl App
+{
+    pub fn new() -> Self
+    {
+        Self {
+            input: String::new(),
+            history: Vec::new(),
+            quit: false,
+            cursor: 0,
+            selected: None,
+        }
+    }
+
+    pub fn evaluate(&mut self)
+    {
+        let tokens = eval::tokenize_expression(&self.input);
+        let mut it = tokens.into_iter().peekable();
+
+        let result = match eval::parse_expression(&mut it)
+        {
+            Ok(root) => eval::eval_tree(&root),
+            Err(e) => Err(e),
+        };
+        let entry = HistoryEntry {
+            input: self.input.clone(),
+            result,
+        };
+        self.history.push(entry);
+        self.input.clear();
+        self.cursor = 0;
+        self.selected = None;
+    }
+
+    pub fn push_input(&mut self, c: char)
+    {
+        let byte_index = self
+            .input
+            .char_indices()
+            .nth(self.cursor)
+            .map(|(i, _)| i)
+            .unwrap_or(self.input.len());
+        self.input.insert(byte_index, c);
+        self.cursor += 1;
+    }
+
+    pub fn pop_input(&mut self)
+    {
+        if self.cursor > 0 && !self.input.is_empty()
+        {
+            self.cursor -= 1;
+            let byte_index = self
+                .input
+                .char_indices()
+                .nth(self.cursor)
+                .map(|(i, _)| i)
+                .unwrap_or(self.input.len());
+
+            self.input.remove(byte_index);
+        }
+    }
+
+    pub fn cursor_left(&mut self)
+    {
+        if self.cursor > 0
+        {
+            self.cursor -= 1;
+        }
+    }
+
+    pub fn cursor_right(&mut self)
+    {
+        if self.cursor < self.input.len()
+        {
+            self.cursor += 1;
+        }
+    }
+
+    pub fn selected_up(&mut self)
+    {
+        match self.selected
+        {
+            None =>
+            {
+                if !self.history.is_empty()
+                {
+                    self.selected = Some(self.history.len() - 1);
+                    self.input = self.history.last().unwrap().input.clone();
+                    self.cursor = self.input.len();
+                }
+            }
+            Some(i) =>
+            {
+                if i > 0
+                {
+                    self.selected = Some(i - 1);
+                    self.input = self.history[i - 1].input.clone();
+                    self.cursor = self.input.len();
+                }
+            }
+        }
+    }
+
+    pub fn selected_down(&mut self)
+    {
+        match self.selected
+        {
+            None =>
+            {}
+            Some(i) =>
+            {
+                if i < self.history.len() - 1
+                {
+                    self.selected = Some(i + 1);
+                    self.input = self.history[i + 1].input.clone();
+                    self.cursor = self.input.len();
+                }
+                else if i == self.history.len()
+                {
+                    self.selected = None;
+                    self.input = String::new();
+                    self.cursor = self.input.len();
+                }
+            }
+        }
+    }
 }
