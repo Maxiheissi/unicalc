@@ -1,5 +1,3 @@
-use std::ops::DerefMut;
-
 use crate::eval::{self, CalcError};
 pub struct HistoryEntry
 {
@@ -7,13 +5,20 @@ pub struct HistoryEntry
     pub result: Result<f64, CalcError>,
 }
 
+pub enum OutputBase
+{
+    Decimal,
+    Hex,
+    Binary,
+}
+
 pub struct App
 {
     pub input: String,
     pub history: Vec<HistoryEntry>,
-    pub quit: bool,
     pub cursor: usize,
     pub selected: Option<usize>,
+    pub output_mode: OutputBase,
 }
 
 impl App
@@ -23,9 +28,9 @@ impl App
         Self {
             input: String::new(),
             history: Vec::new(),
-            quit: false,
             cursor: 0,
             selected: None,
+            output_mode: OutputBase::Decimal,
         }
     }
 
@@ -150,5 +155,15 @@ impl App
                 }
             }
         }
+    }
+
+    pub fn cycle_output_mode(&mut self)
+    {
+        self.output_mode = match self.output_mode
+        {
+            OutputBase::Decimal => OutputBase::Hex,
+            OutputBase::Hex => OutputBase::Binary,
+            OutputBase::Binary => OutputBase::Decimal,
+        };
     }
 }

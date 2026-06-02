@@ -42,6 +42,7 @@ fn main() -> Result<(), io::Error>
                 KeyCode::Up => app.selected_up(),
                 KeyCode::Down => app.selected_down(),
                 KeyCode::Esc => break,
+                KeyCode::F(1) => app.cycle_output_mode(),
                 _ =>
                 {}
             },

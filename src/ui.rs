@@ -1,4 +1,6 @@
-use crate::app::App;
+use std::fmt::format;
+
+use crate::app::{App, OutputBase};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -14,7 +16,12 @@ pub fn draw(frame: &mut Frame, app: &App)
 
         let result_str = match &e.result
         {
-            Ok(n) => format!("{}", n),
+            Ok(n) => match app.output_mode
+            {
+                OutputBase::Decimal => format!("{}", n),
+                OutputBase::Hex => format!("{:#x}", *n as i64),
+                OutputBase::Binary => format!("{:#b}", *n as i64),
+            },
             Err(e) => format!("{:?}", e),
         };
         items.push(ListItem::new(format!("{} = {}", e.input, result_str)));
