@@ -1,6 +1,5 @@
-use std::fmt::format;
-
 use crate::app::{App, OutputBase};
+use ratatui::layout::{Alignment, Constraint, Direction, Layout};
 use ratatui::{
     Frame,
     layout::Rect,
@@ -9,6 +8,14 @@ use ratatui::{
 
 pub fn draw(frame: &mut Frame, app: &App)
 {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1), // Statusleiste
+            Constraint::Min(1),    // Liste
+        ])
+        .split(frame.area());
+
     let mut items: Vec<ListItem> = Vec::new();
     for i in 0..app.selected.unwrap_or(app.history.len())
     {
@@ -19,7 +26,7 @@ pub fn draw(frame: &mut Frame, app: &App)
             Ok(n) => match app.output_mode
             {
                 OutputBase::Decimal => format!("{}", n),
-                OutputBase::Hex => format!("{:#x}", *n as i64),
+                OutputBase::Hex => format!("{:#X}", *n as i64),
                 OutputBase::Binary => format!("{:#b}", *n as i64),
             },
             Err(e) => format!("{:?}", e),
@@ -43,9 +50,18 @@ pub fn draw(frame: &mut Frame, app: &App)
 
     let list = List::new(items).block(Block::default().borders(Borders::ALL));
 
-    frame.render_widget(list, frame.area());
+    frame.render_widget(list, chunks[1]);
     frame.set_cursor_position(ratatui::layout::Position {
         x: app.cursor as u16 + 1,
-        y: app.selected.unwrap_or(app.history.len()) as u16 + 1,
+        y: app.selected.unwrap_or(app.history.len()) as u16 + 2,
     });
+
+    let status = match app.output_mode
+    {
+        OutputBase::Decimal => "[dec]",
+        OutputBase::Hex => "[hex]",
+        OutputBase::Binary => "[bin]",
+    };
+
+    frame.render_widget(Paragraph::new(status), chunks[0]);
 }
