@@ -388,6 +388,7 @@ pub fn eval_tree(node: &Node) -> Result<f64, CalcError>
         {
             "pi" => Ok(std::f64::consts::PI),
             "e" => Ok(std::f64::consts::E),
+            "euler" => Ok(std::f64::consts::E),
             _ => Err(CalcError::UnknownVariable(s.clone())),
         },
 
