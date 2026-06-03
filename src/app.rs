@@ -166,4 +166,15 @@ impl App
             OutputBase::Binary => OutputBase::Decimal,
         };
     }
+
+    pub fn delete_selected(&mut self)
+    {
+        if let Some(i) = self.selected
+        {
+            self.history.remove(i);
+            self.selected = None;
+            self.input = String::new();
+            self.cursor = 0;
+        }
+    }
 }

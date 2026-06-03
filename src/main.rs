@@ -1,4 +1,4 @@
-use crossterm::event::{self, Event, KeyCode, KeyEvent};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -32,9 +32,11 @@ fn main() -> Result<(), io::Error>
 
         match event::read()?
         {
-            Event::Key(KeyEvent { code, .. }) => match code
+            Event::Key(KeyEvent {
+                code, modifiers, ..
+            }) => match code
             {
-                KeyCode::Char(c) => app.push_input(c),
+                KeyCode::Char(c) if modifiers.is_empty() => app.push_input(c),
                 KeyCode::Backspace => app.pop_input(),
                 KeyCode::Enter => app.evaluate(),
                 KeyCode::Left => app.cursor_left(),
@@ -43,6 +45,11 @@ fn main() -> Result<(), io::Error>
                 KeyCode::Down => app.selected_down(),
                 KeyCode::Esc => break,
                 KeyCode::F(1) => app.cycle_output_mode(),
+                KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    app.delete_selected()
+                }
+
                 _ =>
                 {}
             },

@@ -4,7 +4,7 @@ use ratatui::style::{Color, Style, Stylize};
 use ratatui::{
     Frame,
     layout::Rect,
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
 };
 
 //formats a historyentry into a listelement
@@ -58,6 +58,7 @@ pub fn draw(frame: &mut Frame, app: &App)
     let list = List::new(items).block(
         Block::default()
             .borders(Borders::ALL) //border type
+            .border_type(BorderType::Thick)
             .border_style(Style::default().fg(Color::Rgb(122, 121, 28))), //border color
     );
 
