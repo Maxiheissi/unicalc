@@ -12,6 +12,7 @@ mod ui;
 
 fn main() -> Result<(), io::Error>
 {
+    //defindes panic handling
     let original_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         disable_raw_mode().unwrap();
@@ -19,24 +20,27 @@ fn main() -> Result<(), io::Error>
         original_hook(info);
     }));
 
+    //terminal setup
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
-
     let backend = CrosstermBackend::new(io::stdout());
     let mut terminal = Terminal::new(backend)?;
 
+    //initialize app state
     let mut app = app::App::new();
+    //game loop ahhh
     loop
     {
-        terminal.draw(|f| ui::draw(f, &app))?;
+        terminal.draw(|f| ui::draw(f, &app))?; //draw ui
 
+        //input handling
         match event::read()?
         {
             Event::Key(KeyEvent {
                 code, modifiers, ..
             }) => match code
             {
-                KeyCode::Char(c) if modifiers.is_empty() => app.push_input(c),
+                KeyCode::Char(c) if modifiers.is_empty() => app.push_input(c), //normal char
                 KeyCode::Backspace => app.pop_input(),
                 KeyCode::Enter => app.evaluate(),
                 KeyCode::Left => app.cursor_left(),
@@ -46,6 +50,7 @@ fn main() -> Result<(), io::Error>
                 KeyCode::Esc => break,
                 KeyCode::F(1) => app.cycle_output_mode(),
                 KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) =>
+                //delete selected input line
                 {
                     app.delete_selected()
                 }
