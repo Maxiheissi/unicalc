@@ -45,23 +45,36 @@ pub fn draw(frame: &mut Frame, app: &App) {
 
     let calc_area = main_areas[0];
 
-    // 3. Render Status Bar (now spans the full terminal width)
-    let status = match app.output_mode {
-        OutputBase::Decimal => "[dec]",
-        OutputBase::Hex => "[hex]",
-        OutputBase::Binary => "[bin]",
-    };
+    //  Render Status Bar 
+let status_chunks = Layout::default()
+    .direction(Direction::Horizontal)
+    .constraints([
+        Constraint::Min(10),
+                Constraint::Length(15),  
+    ])
+    .split(status_area);
 
-    frame.render_widget(Paragraph::new(status), status_area);
+let status = match app.output_mode {
+    OutputBase::Decimal => "[DEC]",
+    OutputBase::Hex => "[HEX]",
+    OutputBase::Binary => "[BIN]",
+};
 
-    // 4. Draw Main Window (Calculator)
+frame.render_widget(Paragraph::new(status).style(Style::default().fg(Color::DarkGray)), status_chunks[0]);
+
+let help_hint = Paragraph::new("[F2 Help]")
+    .style(Style::default().fg(Color::DarkGray))
+    .alignment(ratatui::layout::Alignment::Right);
+
+frame.render_widget(help_hint, status_chunks[1]);
+    // Draw Main Window
     let mut items: Vec<ListItem> = Vec::new();
     for i in 0..app.selected.unwrap_or(app.history.len()) {
         let e = &app.history[i];
         items.push(make_item(app, e));
     }
 
-    //add current input (cursor position)
+    //add current input
     items.push(ListItem::new(app.input.as_str()));
 
     //add all historyentries after current input
@@ -102,7 +115,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
             Line::from(vec![Span::styled("  F2           ", Style::default().fg(Color::Cyan)), Span::raw("Toggle help page")]),
             Line::from(vec![Span::styled("  ESC          ", Style::default().fg(Color::Cyan)), Span::raw("Quit application")]),
             Line::from(""),
-           Line::from(Span::styled("--- Implemented Functions ---", Style::default().fg(Color::Yellow))),
+           Line::from(Span::styled("--- Functions ---", Style::default().fg(Color::Yellow))),
             Line::from(""),
             Line::from(vec![Span::styled("  sqrt(x)      ", Style::default().fg(Color::Green)), Span::raw("Square root")]),
             Line::from(vec![Span::styled("  abs(x)       ", Style::default().fg(Color::Green)), Span::raw("Absolute value")]),
