@@ -21,7 +21,7 @@ fn make_item(app: &App, e: &HistoryEntry) -> ListItem<'static> {
 
 //draw the application frame
 pub fn draw(frame: &mut Frame, app: &App) {
-    // 1. First Split: Vertical for status bar (top) and content area (bottom)
+    // First Split: Vertical for status bar (top) and content area (bottom)
     let vertical_chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Length(1), Constraint::Min(1)])
@@ -30,7 +30,7 @@ pub fn draw(frame: &mut Frame, app: &App) {
     let status_area = vertical_chunks[0];
     let content_area = vertical_chunks[1];
 
-    // 2. Second Split: Horizontal split for content area (only if help is toggled)
+    // Second Split: Horizontal split for content area (only if help is toggled)
     let main_areas = if app.show_help {
         Layout::default()
             .direction(Direction::Horizontal)
