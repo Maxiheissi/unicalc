@@ -49,6 +49,7 @@ fn main() -> Result<(), io::Error>
                 KeyCode::Down => app.selected_down(),
                 KeyCode::Esc => break,
                 KeyCode::F(1) => app.cycle_output_mode(),
+                KeyCode::F(2) => app.toggle_help(),
                 KeyCode::Char('d') if modifiers.contains(KeyModifiers::CONTROL) =>
                 //delete selected input line
                 {

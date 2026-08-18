@@ -19,6 +19,7 @@ pub struct App
     pub cursor: usize,
     pub selected: Option<usize>,
     pub output_mode: OutputBase,
+    pub show_help: bool,
 }
 
 impl App
@@ -31,6 +32,7 @@ impl App
             cursor: 0,
             selected: None,
             output_mode: OutputBase::Decimal,
+            show_help: false,
         }
     }
 
@@ -169,12 +171,28 @@ impl App
 
     pub fn delete_selected(&mut self)
     {
-        if let Some(i) = self.selected
-        {
-            self.history.remove(i);
-            self.selected = None;
-            self.input = String::new();
-            self.cursor = 0;
+       
+        if let Some(idx) = self.selected {
+            if idx < self.history.len() {
+                self.history.remove(idx);
+
+                if self.history.is_empty() {
+                    self.selected = None;
+                    self.input.clear();
+                } else {
+                    let new_idx = idx.min(self.history.len() - 1);
+                    self.selected = Some(new_idx);
+                
+                    self.input = self.history[new_idx].input.clone();
+                }
+
+                self.cursor = self.input.len();
+            }
         }
-    }
+     }
+
+     pub fn toggle_help(&mut self)
+     {
+         self.show_help = !self.show_help;
+     }
 }
